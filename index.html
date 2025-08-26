@@ -185,10 +185,14 @@
         results.push({ blob, filename });
         if(autoDownload){
           const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
+          const href = URL.createObjectURL(blob);
+          a.href = href;
           a.download = filename;
-          document.body.appendChild(a); a.click();
-          URL.revokeObjectURL(a.href); a.remove();
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          // revoke는 클릭 직후 지연 실행
+          setTimeout(()=>URL.revokeObjectURL(href), 1000);
         }
         log(`  성공: ${filename}`,'ok');
       }catch(err){
@@ -205,7 +209,7 @@
       const zip = new JSZip();
       results.forEach(r=> zip.file(r.filename, r.blob));
       const content = await zip.generateAsync({type:"blob"});
-      saveAs(content, prefix||'images'+".zip");
+      saveAs(content, (prefix||'images')+".zip");
       log(`ZIP 다운로드 완료`,'ok');
     }
     state.files = [];
