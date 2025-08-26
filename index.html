@@ -1,212 +1,327 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NAI 메타데이터 제거기</title>
-  <style>
-    :root{
-      --bg:#0b0f14;--card:#121823;--muted:#2a3340;--text:#eaf2ff;--sub:#9fb2cc;--accent:#7aa2ff;--ok:#38d39f;--warn:#ffcf5a;--err:#ff6b6b
-    }
-    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b0f14,#0e1219 50%,#0b0f14);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,Helvetica,Arial}
-    header{padding:28px 20px 10px;text-align:center}
-    h1{font-size:24px;margin:0 0 8px}p.lead{margin:0;color:var(--sub)}
-    .wrap{max-width:940px;margin:16px auto 40px;padding:0 16px}
-    .card{background:var(--card);border:1px solid #162233;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
-    .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--muted)}
-    .left, .right{display:flex;gap:12px;align-items:center}
-    .btn{appearance:none;border:1px solid var(--muted);background:#101827;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600}
-    .btn:hover{border-color:#395070}
-    .btn.primary{background:var(--accent);border-color:var(--accent);color:#051028}
-    .btn.primary:disabled{opacity:.5;cursor:not-allowed}
-    .drop{padding:18px;border:2px dashed #324056;border-radius:14px;margin:16px;background:#0e1520;text-align:center;color:var(--sub)}
-    .drop.dragover{border-color:var(--accent);color:var(--accent)}
-    .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;padding:16px}
-    .item{background:#0d1420;border:1px solid #1c2a3d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
-    .thumb{display:block;width:100%;height:140px;object-fit:cover;background:#0a111b}
-    .meta{padding:6px 8px;font-size:12px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
-    .actions{padding:6px 8px;display:flex;gap:6px;justify-content:flex-end}
-    .log{padding:12px 16px;border-top:1px solid var(--muted);max-height:160px;overflow:auto;font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px;background:#0c1320}
-    .ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}
-    footer{max-width:940px;margin:16px auto 40px;padding:0 16px;color:var(--sub);text-align:center}
-    a{color:var(--accent)}
-    input.nameprefix{padding:10px 12px;border-radius:12px;border:1px solid var(--muted);background:#101827;color:var(--text);min-width:120px}
-  </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이미지 메타데이터 제거 도구</title>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #6c757d;
+            --background-color: #f8f9fa;
+            --text-color: #212529;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            box-sizing: border-box;
+        }
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 25px;
+        }
+        .control-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        input[type="text"], input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="file"] {
+            cursor: pointer;
+        }
+        button {
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        button:disabled {
+            background-color: var(--secondary-color);
+            cursor: not-allowed;
+        }
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        #preview-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            min-height: 50px;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: #fdfdfd;
+        }
+        .preview-item {
+            position: relative;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .preview-item .thumbnail {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            display: block;
+        }
+        .preview-item .file-info {
+            font-size: 12px;
+            padding: 5px;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: block;
+            background: #f1f1f1;
+        }
+        #log-container {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            height: 150px;
+            overflow-y: auto;
+            background: #2c3e50;
+            color: #ecf0f1;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+        }
+        .log-message {
+            margin: 0 0 5px 0;
+            white-space: pre-wrap;
+        }
+        .log-success { color: #2ecc71; }
+        .log-error { color: #e74c3c; }
+        .log-warn { color: #f39c12; }
+        .log-info { color: #3498db; }
+        .placeholder {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            color: var(--secondary-color);
+        }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>NAI PNG 메타데이터 제거기</h1>
-    <p class="lead">PNG의 메타데이터를 제거하고 재저장합니다.<br/>자동 다운로드 / 개별 다운로드 버튼 / ZIP 다운로드 모두 지원합니다.</p>
-  </header>
-  <div class="wrap">
-    <div class="card">
-      <div class="toolbar">
-        <div class="left">
-          <label class="btn">
-            파일 선택
-            <input id="file-input" type="file" accept="image/*" multiple hidden />
-          </label>
-          <button id="clear" class="btn" type="button">초기화</button>
-          <input id="name-prefix" class="nameprefix" type="text" placeholder="파일명 접두어 (기본: 숫자만)" />
-        </div>
-        <div class="right" style="flex-wrap:wrap;gap:6px">
-          <label>저장 포맷
-            <select id="out-format" class="btn" style="padding-right:32px">
-              <option value="png" selected>PNG</option>
-              <option value="jpeg">JPEG</option>
-              <option value="webp">WEBP</option>
-            </select>
-          </label>
-          <button id="process-list" class="btn primary" type="button">목록 추가</button>
-          <button id="process-auto" class="btn" type="button">자동 다운로드</button>
-          <button id="process-zip" class="btn" type="button">ZIP 다운로드</button>
-        </div>
-      </div>
 
-      <div id="drop" class="drop">여기에 이미지를 드래그 앤 드롭하거나, 상단의 <b>파일 선택</b>을 눌러주세요.</div>
-      <div id="list" class="list"></div>
-      <pre id="log" class="log"></pre>
+    <div class="container">
+        <h1>🖼️ 이미지 메타데이터 제거 도구</h1>
+        
+        <div class="control-section">
+            <div class="control-group">
+                <label for="local-image-input">1. 이미지 파일 선택:</label>
+                <input type="file" id="local-image-input" multiple accept="image/png, image/jpeg, image/webp, image/bmp">
+            </div>
+            <div class="control-group">
+                <label for="filename-prefix">2. 파일명 접두사 (선택 사항):</label>
+                <input type="text" id="filename-prefix" placeholder="예: MyImage_">
+            </div>
+            <div class="control-group">
+                <button id="process-and-download">3. 메타데이터 제거 및 다운로드</button>
+            </div>
+        </div>
+
+        <label>미리보기:</label>
+        <div id="preview-list">
+            <div class="placeholder">이미지를 선택해주세요.</div>
+        </div>
+
+        <label style="margin-top: 20px; display: block;">처리 로그:</label>
+        <div id="log-container"></div>
     </div>
-  </div>
 
-  <footer>
-    <p>모든 처리는 브라우저 로컬에서만 수행됩니다.</p>
-  </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const localImageInput = document.getElementById('local-image-input');
+            const filenamePrefixInput = document.getElementById('filename-prefix');
+            const processAndDownloadButton = document.getElementById('process-and-download');
+            const previewList = document.getElementById('preview-list');
+            const logContainer = document.getElementById('log-container');
 
-  <script>
-  const state = { files: [], counterStart: 1, results: [] }
-  const el = (id)=>document.getElementById(id);
-  const $drop = el('drop'), $list=el('list'), $log=el('log');
+            let selectedFiles = [];
 
-  function log(msg, cls=""){
-    const line = document.createElement('div');
-    if(cls) line.className = cls;
-    line.textContent = msg;
-    $log.appendChild(line);
-    $log.scrollTop = $log.scrollHeight;
-  }
+            // 로그 메시지 추가 함수
+            function addLogMessage(message, type = 'info') {
+                const logMessage = document.createElement('p');
+                logMessage.className = `log-message log-${type}`;
+                logMessage.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                logContainer.appendChild(logMessage);
+                logContainer.scrollTop = logContainer.scrollHeight; // 자동 스크롤
+            }
 
-  function renderList(){
-    $list.innerHTML = '';
-    if(state.results.length===0){
-      $list.innerHTML = '<div class="item" style="display:flex;align-items:center;justify-content:center;height:140px;color:var(--sub)">처리된 이미지가 없습니다.</div>'
-      return;
-    }
-    state.results.forEach(r=>{
-      const card = document.createElement('div');card.className='item';
-      const img = document.createElement('img');img.className='thumb';
-      img.src = URL.createObjectURL(r.blob);
-      const meta = document.createElement('div');meta.className='meta';
-      meta.innerHTML = `<span>${r.filename}</span><span>${(r.blob.size/1024).toFixed(1)} KB</span>`;
-      const actions = document.createElement('div');actions.className='actions';
-      const btn = document.createElement('a');
-      btn.href = img.src; btn.download = r.filename; btn.className='btn'; btn.textContent='다운로드';
-      actions.appendChild(btn);
-      card.appendChild(img);card.appendChild(meta);card.appendChild(actions);
-      $list.appendChild(card);
-    })
-  }
+            // 미리보기 렌더링 함수
+            function renderPreviewList() {
+                previewList.innerHTML = ''; // 미리보기 초기화
+                if (selectedFiles.length === 0) {
+                    previewList.innerHTML = `<div class="placeholder">이미지를 선택해주세요.</div>`;
+                    return;
+                }
+                selectedFiles.forEach(file => {
+                    const listItem = document.createElement('div');
+                    listItem.className = 'preview-item';
 
-  function onFilesPicked(files){
-    const imgs = [...files].filter(f=>f.type.startsWith('image/'));
-    state.files.push(...imgs);
-    log(`${imgs.length}개 이미지 추가됨.`,'ok');
-  }
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        listItem.innerHTML = `
+                            <img src="${e.target.result}" class="thumbnail" alt="preview">
+                            <span class="file-info" title="${file.name}">${file.name}</span>
+                        `;
+                    };
+                    reader.readAsDataURL(file);
+                    previewList.appendChild(listItem);
+                });
+            }
 
-  // FileReader 기반 변환 (모바일 호환성 ↑)
-  function convertToBlob(sourceBlob, targetFormat){
-    return new Promise((resolve,reject)=>{
-      const reader = new FileReader();
-      reader.onload = ()=>{
-        const img = new Image();
-        img.onload=()=>{
-          try{
-            const canvas=document.createElement('canvas');
-            canvas.width=img.width; canvas.height=img.height;
-            const ctx=canvas.getContext('2d');
-            ctx.drawImage(img,0,0);
-            canvas.toBlob(b=>{
-              if(b) resolve(b);
-              else reject(new Error('toBlob 실패'));
-            }, `image/${targetFormat}`,1.0);
-          }catch(err){ reject(err); }
-        };
-        img.onerror=()=>reject(new Error('이미지 로드 실패'));
-        img.src=reader.result;
-      };
-      reader.onerror=()=>reject(new Error('파일 읽기 실패'));
-      reader.readAsDataURL(sourceBlob);
-    });
-  }
+            // 파일 선택 핸들러
+            localImageInput.addEventListener('change', (event) => {
+                selectedFiles = Array.from(event.target.files).filter(file => file.type.startsWith('image/'));
+                if (selectedFiles.length > 0) {
+                    addLogMessage(`${selectedFiles.length}개의 이미지를 선택했습니다.`, 'info');
+                }
+                renderPreviewList();
+            });
 
-  async function processImageBlob(originalBlob, finalFormat){
-    const tempJpeg = await convertToBlob(originalBlob,'jpeg');
-    if(finalFormat==='jpeg') return {blob:tempJpeg,format:'jpeg'};
-    const finalBlob = await convertToBlob(tempJpeg, finalFormat);
-    return {blob:finalBlob,format:finalFormat};
-  }
+            /**
+             * 이미지를 Canvas에 그린 후 Blob으로 변환하여 메타데이터를 제거하는 함수
+             * @param {Blob} originalBlob - 원본 이미지 파일 Blob
+             * @returns {Promise<Blob>} 메타데이터가 제거된 PNG 포맷의 Blob
+             */
+            function stripMetadata(originalBlob) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    const objectURL = URL.createObjectURL(originalBlob);
 
-  async function processFiles(addToListOnly=false, autoDownload=false){
-    const outFmt = el('out-format').value;
-    const prefix = el('name-prefix').value.trim();
-    if(state.files.length===0){ log('처리할 이미지를 먼저 선택하세요.','warn'); return; }
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // PNG 포맷으로 Blob을 생성 (PNG는 무손실 압축)
+                        canvas.toBlob(newBlob => {
+                            URL.revokeObjectURL(objectURL);
+                            if (newBlob) {
+                                resolve(newBlob);
+                            } else {
+                                reject(new Error('Canvas toBlob 변환에 실패했습니다.'));
+                            }
+                        }, 'image/png');
+                    };
 
-    log(`${state.files.length}개 이미지 처리 시작...`);
-    let num=state.counterStart;
-    const results=[];
-    for(const file of state.files){
-      try{
-        const {blob,format}=await processImageBlob(file,outFmt);
-        const baseName=prefix?`${prefix} ${num}`:`${num}`;
-        const filename=`${baseName}.${format}`;
-        num++;
-        results.push({blob,filename});
-        if(autoDownload){
-          const a=document.createElement('a');
-          const href=URL.createObjectURL(blob);
-          a.href=href; a.download=filename;
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(()=>URL.revokeObjectURL(href),1500);
-        }
-        log(`성공: ${filename}`,'ok');
-      }catch(err){
-        log(`오류 (${file.name}): ${err.message}`,'err');
-      }
-    }
+                    img.onerror = () => {
+                        URL.revokeObjectURL(objectURL);
+                        reject(new Error("이미지 로드에 실패했습니다. 파일이 손상되었을 수 있습니다."));
+                    };
 
-    if(addToListOnly){
-      state.results=results; renderList();
-    }
-    if(!addToListOnly && !autoDownload){
-      const zip=new JSZip();
-      results.forEach(r=>zip.file(r.filename,r.blob));
-      const content=await zip.generateAsync({type:"blob"});
-      saveAs(content,(prefix||'images')+".zip");
-      log("ZIP 다운로드 완료",'ok');
-    }
+                    img.src = objectURL;
+                });
+            }
 
-    // 👉 더 이상 자동으로 state.files = [] 비우지 않음
-    log('모든 이미지 처리가 완료되었습니다.');
-  }
+            // 다운로드 트리거 함수
+            function triggerDownload(blob, filename) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }
 
-  // 이벤트
-  el('file-input').addEventListener('change',e=>{onFilesPicked(e.target.files); e.target.value='';});
-  el('clear').addEventListener('click',()=>{state.files=[];state.results=[];renderList();log('목록이 비워졌습니다.');});
-  el('process-list').addEventListener('click',()=>processFiles(true,false));
-  el('process-auto').addEventListener('click',()=>processFiles(false,true));
-  el('process-zip').addEventListener('click',()=>processFiles(false,false));
+            // 메인 처리 함수
+            async function processImages() {
+                if (selectedFiles.length === 0) {
+                    addLogMessage("처리할 이미지를 먼저 선택해주세요.", "warn");
+                    return;
+                }
 
-  ['dragenter','dragover'].forEach(ev=>{
-    $drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();$drop.classList.add('dragover');});
-  });
-  ['dragleave','drop'].forEach(ev=>{
-    $drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();$drop.classList.remove('dragover');});
-  });
-  $drop.addEventListener('drop',e=>{onFilesPicked(e.dataTransfer.files);});
+                const prefix = filenamePrefixInput.value.trim();
+                let processCount = 0;
 
-  renderList();
-  </script>
+                addLogMessage(`총 ${selectedFiles.length}개 이미지 처리를 시작합니다.`, 'info');
+                processAndDownloadButton.disabled = true;
+                processAndDownloadButton.textContent = '처리 중...';
+
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    const fileIndex = i + 1;
+                    const finalFilename = `${prefix}${fileIndex}.png`;
+
+                    try {
+                        addLogMessage(`- 처리 중 (${fileIndex}/${selectedFiles.length}): ${file.name}`, 'info');
+                        
+                        // 1. 메타데이터 제거
+                        const processedBlob = await stripMetadata(file);
+                        
+                        // 2. 파일 다운로드
+                        triggerDownload(processedBlob, finalFilename);
+                        
+                        addLogMessage(`  성공: "${finalFilename}"으로 저장되었습니다.`, 'success');
+                        processCount++;
+
+                    } catch (error) {
+                        addLogMessage(`  오류 (${file.name}): ${error.message}`, 'error');
+                    }
+                }
+
+                addLogMessage(`처리 완료! 총 ${selectedFiles.length}개 중 ${processCount}개 성공.`, 'info');
+                processAndDownloadButton.disabled = false;
+                processAndDownloadButton.textContent = '3. 메타데이터 제거 및 다운로드';
+            }
+
+            processAndDownloadButton.addEventListener('click', processImages);
+        });
+    </script>
+
 </body>
 </html>
