@@ -184,11 +184,8 @@
         num++;
         results.push({ blob, filename });
         if(autoDownload){
-          const a = document.createElement('a');
-          a.href = URL.createObjectURL(blob);
-          a.download = filename;
-          document.body.appendChild(a); a.click();
-          URL.revokeObjectURL(a.href); a.remove();
+          // FileSaver.js 라이브러리의 saveAs 함수를 사용
+          saveAs(blob, filename);
         }
         log(`성공: ${filename}`,'ok');
       }catch(err){
@@ -197,7 +194,8 @@
     }
 
     if(addToListOnly){
-      state.results = results;
+      state.results.push(...results);
+      state.counterStart = num;
       renderList();
     }
     if(!addToListOnly && !autoDownload){
@@ -213,10 +211,42 @@
   }
 
   el('file-input').addEventListener('change', (e)=>{ onFilesPicked(e.target.files); e.target.value=''; })
-  el('clear').addEventListener('click', ()=>{ state.files = []; state.results=[]; renderList(); log('목록이 비워졌습니다.'); })
+  el('clear').addEventListener('click', ()=>{ state.files = []; state.results=[]; state.counterStart = 1; renderList(); log('목록이 비워졌습니다.'); })
   el('process-list').addEventListener('click', ()=> processFiles(true,false));
-  el('process-auto').addEventListener('click', ()=> processFiles(false,true));
-  el('process-zip').addEventListener('click', ()=> processFiles(false,false));
+
+  // --- 여기부터 수정된 부분입니다 ---
+
+  el('process-auto').addEventListener('click', () => {
+      // 1. 처리된 결과 목록(state.results)이 있으면, 해당 목록의 파일들을 다운로드합니다.
+      if (state.results.length > 0) {
+          log(`처리된 목록의 이미지 ${state.results.length}개를 다운로드합니다.`, 'ok');
+          state.results.forEach(r => saveAs(r.blob, r.filename));
+          log('다운로드가 완료되었습니다.');
+      } 
+      // 2. 처리된 목록이 없으면, 기존처럼 선택된 파일(state.files)을 처리하고 바로 다운로드합니다.
+      else {
+          processFiles(false, true);
+      }
+  });
+
+  el('process-zip').addEventListener('click', async () => {
+      // 1. 처리된 결과 목록(state.results)이 있으면, 해당 목록을 ZIP으로 만들어 다운로드합니다.
+      if (state.results.length > 0) {
+          log(`처리된 목록의 이미지 ${state.results.length}개를 ZIP으로 다운로드합니다.`, 'ok');
+          const prefix = el('name-prefix').value.trim();
+          const zip = new JSZip();
+          state.results.forEach(r => zip.file(r.filename, r.blob));
+          const content = await zip.generateAsync({ type: "blob" });
+          saveAs(content, (prefix || 'images') + ".zip");
+          log('ZIP 다운로드 완료', 'ok');
+      } 
+      // 2. 처리된 목록이 없으면, 기존처럼 선택된 파일(state.files)을 처리하고 바로 ZIP으로 다운로드합니다.
+      else {
+          processFiles(false, false);
+      }
+  });
+
+  // --- 여기까지 수정된 부분입니다 ---
 
   ;['dragenter','dragover'].forEach(ev=>{
     $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.add('dragover'); })
