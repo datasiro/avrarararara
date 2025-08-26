@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NAI PNG 메타데이터 제거기 (안정화)</title>
+  <style>
+    :root{
+      --bg:#0b0f14;--card:#121823;--muted:#2a3340;--text:#eaf2ff;--sub:#9fb2cc;--accent:#7aa2ff;--ok:#38d39f;--warn:#ffcf5a;--err:#ff6b6b
+    }
+    *{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#0b0f14,#0e1219 50%,#0b0f14);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,Helvetica,Arial}
+    header{padding:28px 20px 10px;text-align:center}
+    h1{font-size:24px;margin:0 0 8px}p.lead{margin:0;color:var(--sub)}
+    .wrap{max-width:940px;margin:16px auto 40px;padding:0 16px}
+    .card{background:var(--card);border:1px solid #162233;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+    .toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--muted)}
+    .left, .right{display:flex;gap:12px;align-items:center}
+    .btn{appearance:none;border:1px solid var(--muted);background:#101827;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:600}
+    .btn:hover{border-color:#395070}
+    .btn.primary{background:var(--accent);border-color:var(--accent);color:#051028}
+    .btn.primary:disabled{opacity:.5;cursor:not-allowed}
+    .drop{padding:18px;border:2px dashed #324056;border-radius:14px;margin:16px;background:#0e1520;text-align:center;color:var(--sub)}
+    .drop.dragover{border-color:var(--accent);color:var(--accent)}
+    .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;padding:16px}
+    .item{background:#0d1420;border:1px solid #1c2a3d;border-radius:14px;overflow:hidden}
+    .thumb{display:block;width:100%;height:140px;object-fit:cover;background:#0a111b}
+    .meta{padding:8px 10px;font-size:12px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
+    .log{padding:12px 16px;border-top:1px solid var(--muted);max-height:160px;overflow:auto;font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px;background:#0c1320}
+    .ok{color:var(--ok)}.warn{color:var(--warn)}.err{color:var(--err)}
+    footer{max-width:940px;margin:16px auto 40px;padding:0 16px;color:var(--sub);text-align:center}
+    a{color:var(--accent)}
+    input.nameprefix{padding:10px 12px;border-radius:12px;border:1px solid var(--muted);background:#101827;color:var(--text);min-width:120px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>NAI PNG 메타데이터 제거기</h1>
+    <p class="lead">NovelAI 등에서 받은 PNG의 메타데이터를 <b>확장 스크립트와 동일한 방식</b>(캔버스 재인코딩 → 임시 JPEG → 최종 포맷)으로 제거합니다.<br/>모바일/멀티파일 안정화 버전입니다.</p>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <div class="toolbar">
+        <div class="left">
+          <label class="btn">
+            파일 선택
+            <input id="file-input" type="file" accept="image/*" multiple hidden />
+          </label>
+          <button id="clear" class="btn" type="button">초기화</button>
+          <input id="name-prefix" class="nameprefix" type="text" placeholder="파일명 접두어 (기본: 숫자만)" />
+        </div>
+        <div class="right">
+          <label>저장 포맷
+            <select id="out-format" class="btn" style="padding-right:32px">
+              <option value="png" selected>PNG (권장)</option>
+              <option value="jpeg">JPEG</option>
+              <option value="webp">WEBP</option>
+            </select>
+          </label>
+          <button id="process" class="btn primary" type="button">메타데이터 제거 & 다운로드</button>
+        </div>
+      </div>
+
+      <div id="drop" class="drop">여기에 이미지를 드래그 앤 드롭하거나, 상단의 <b>파일 선택</b>을 눌러주세요.</div>
+      <div id="list" class="list"></div>
+      <pre id="log" class="log"></pre>
+    </div>
+  </div>
+
+  <footer>
+    <p>GitHub Pages에 그대로 올리면 동작합니다. 모든 처리는 <b>브라우저 로컬</b>에서 수행됩니다.</p>
+  </footer>
+
+  <script>
+  // Safari 대응용 toBlob 폴리필
+  if (!HTMLCanvasElement.prototype.toBlob) {
+    HTMLCanvasElement.prototype.toBlob = function(callback, type, quality) {
+      const dataURL = this.toDataURL(type, quality);
+      const binStr = atob(dataURL.split(',')[1]);
+      const len = binStr.length;
+      const arr = new Uint8Array(len);
+      for (let i = 0; i < len; i++) arr[i] = binStr.charCodeAt(i);
+      callback(new Blob([arr], { type: type || 'image/png' }));
+    };
+  }
+
+  const state = { files: [], counterStart: 1 }
+
+  const el = (id)=>document.getElementById(id);
+  const $drop = el('drop'), $list=el('list'), $log=el('log');
+
+  function log(msg, cls=""){
+    const line = document.createElement('div');
+    if(cls) line.className = cls;
+    line.textContent = msg;
+    $log.appendChild(line);
+    $log.scrollTop = $log.scrollHeight;
+  }
+
+  function renderList(){
+    $list.innerHTML = '';
+    if(state.files.length===0){
+      $list.innerHTML = '<div class="item" style="display:flex;align-items:center;justify-content:center;height:140px;color:var(--sub)">선택된 이미지가 없습니다.</div>'
+      return;
+    }
+    state.files.forEach((file, i)=>{
+      const card = document.createElement('div');card.className='item';
+      const img = document.createElement('img');img.className='thumb';
+      const reader = new FileReader();
+      reader.onload = e=> img.src=e.target.result;
+      reader.readAsDataURL(file);
+      const meta = document.createElement('div');meta.className='meta';
+      meta.innerHTML = `<span>${file.name}</span><span>${(file.size/1024).toFixed(1)} KB</span>`;
+      card.appendChild(img);card.appendChild(meta);$list.appendChild(card);
+    })
+  }
+
+  function onFilesPicked(files){
+    const imgs = [...files].filter(f=>f.type.startsWith('image/'));
+    state.files.push(...imgs);
+    renderList();
+    log(`${imgs.length}개 이미지 추가됨.`,'ok');
+  }
+
+  // 안정화된 Blob 변환
+  function convertToBlob(sourceBlob, targetFormat, qualityPref='quality'){
+    return new Promise((resolve, reject)=>{
+      const img = new Image();
+      const url = URL.createObjectURL(sourceBlob);
+      img.onload = ()=>{
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width; canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img,0,0);
+          const mime = `image/${targetFormat}`;
+          let quality;
+          if(targetFormat==='jpeg' || targetFormat==='webp'){
+            const map = {quality:1.0, normal:0.85, low:0.70};
+            quality = map[qualityPref] ?? 1.0;
+          }
+          canvas.toBlob(b=>{
+            URL.revokeObjectURL(url);
+            b?resolve(b):reject(new Error('toBlob 실패'));
+          }, mime, quality);
+        } catch(err){
+          URL.revokeObjectURL(url);
+          reject(err);
+        }
+      };
+      img.onerror = ()=>{
+        URL.revokeObjectURL(url);
+        reject(new Error('이미지 로드 실패'));
+      };
+      img.src = url;
+    })
+  }
+
+  async function processImageBlob(originalBlob, finalFormat){
+    log('메타데이터 제거 1/2: 임시 JPEG 생성 중...');
+    const tempJpeg = await convertToBlob(originalBlob, 'jpeg', 'quality');
+    if(finalFormat==='jpeg'){
+      log('메타데이터 제거 완료 (JPEG 최고품질).','ok');
+      return { blob: tempJpeg, format: 'jpeg' };
+    }
+    log(`메타데이터 제거 2/2: 최종 ${finalFormat.toUpperCase()}로 변환 중...`);
+    const finalBlob = await convertToBlob(tempJpeg, finalFormat, 'quality');
+    return { blob: finalBlob, format: finalFormat };
+  }
+
+  async function processAll(){
+    const outFmt = document.getElementById('out-format').value;
+    const prefix = document.getElementById('name-prefix').value.trim();
+    if(state.files.length===0){ log('처리할 이미지를 먼저 선택하세요.','warn'); return; }
+    log(`${state.files.length}개 이미지 처리 시작...`);
+    document.getElementById('process').disabled = true;
+
+    let num = state.counterStart;
+    for(const file of state.files){
+      try{
+        log(`- 처리 중: ${file.name}`);
+        const { blob, format } = await processImageBlob(file, outFmt);
+        const baseName = prefix ? `${prefix} ${num}` : `${num}`;
+        const filename = `${baseName}.${format}`;
+        num++;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a); a.click();
+        URL.revokeObjectURL(a.href); a.remove();
+        log(`  성공: ${filename}`,'ok');
+      }catch(err){
+        log(`  오류 (${file.name}): ${err.message}`,'err');
+      }
+    }
+    document.getElementById('process').disabled = false;
+    log('모든 이미지 처리가 완료되었습니다.');
+  }
+
+  document.getElementById('file-input').addEventListener('change', (e)=>{
+    onFilesPicked(e.target.files); e.target.value='';
+  })
+
+  document.getElementById('clear').addEventListener('click', ()=>{
+    state.files = []; renderList(); log('목록이 비워졌습니다.');
+  })
+
+  document.getElementById('process').addEventListener('click', processAll);
+
+  ;['dragenter','dragover'].forEach(ev=>{
+    $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.add('dragover'); })
+  })
+  ;['dragleave','drop'].forEach(ev=>{
+    $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.remove('dragover'); })
+  })
+  $drop.addEventListener('drop', e=>{ onFilesPicked(e.dataTransfer.files); })
+
+  renderList();
+  </script>
+</body>
+</html>
