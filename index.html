@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NAI PNG 메타데이터 제거기 (자동/수동/ZIP 지원)</title>
+  <title>NAI 메타데이터 제거기</title>
   <style>
     :root{
       --bg:#0b0f14;--card:#121823;--muted:#2a3340;--text:#eaf2ff;--sub:#9fb2cc;--accent:#7aa2ff;--ok:#38d39f;--warn:#ffcf5a;--err:#ff6b6b
@@ -38,7 +38,7 @@
 <body>
   <header>
     <h1>NAI PNG 메타데이터 제거기</h1>
-    <p class="lead">NovelAI 등에서 받은 PNG의 메타데이터를 <b>확장 스크립트와 동일한 방식</b>(캔버스 재인코딩 → 임시 JPEG → 최종 포맷)으로 제거합니다.<br/>자동 다운로드 / 개별 다운로드 버튼 / ZIP 다운로드 모두 지원합니다.</p>
+    <p class="lead">PNG의 메타데이터를 제거하고 재저장합니다.<br/>자동 다운로드 / 개별 다운로드 버튼 / ZIP 다운로드 모두 지원합니다.</p>
   </header>
   <div class="wrap">
     <div class="card">
@@ -54,12 +54,12 @@
         <div class="right" style="flex-wrap:wrap;gap:6px">
           <label>저장 포맷
             <select id="out-format" class="btn" style="padding-right:32px">
-              <option value="png" selected>PNG (권장)</option>
+              <option value="png" selected>PNG</option>
               <option value="jpeg">JPEG</option>
               <option value="webp">WEBP</option>
             </select>
           </label>
-          <button id="process-list" class="btn primary" type="button">처리 (목록에 추가)</button>
+          <button id="process-list" class="btn primary" type="button">목록 추가</button>
           <button id="process-auto" class="btn" type="button">자동 다운로드</button>
           <button id="process-zip" class="btn" type="button">ZIP 다운로드</button>
         </div>
@@ -72,21 +72,10 @@
   </div>
 
   <footer>
-    <p>GitHub Pages에 그대로 올리면 동작합니다. 모든 처리는 <b>브라우저 로컬</b>에서 수행됩니다.</p>
+    <p>모든 처리는 브라우저 로컬에서만 수행됩니다.</p>
   </footer>
 
   <script>
-  if (!HTMLCanvasElement.prototype.toBlob) {
-    HTMLCanvasElement.prototype.toBlob = function(callback, type, quality) {
-      const dataURL = this.toDataURL(type, quality);
-      const binStr = atob(dataURL.split(',')[1]);
-      const len = binStr.length;
-      const arr = new Uint8Array(len);
-      for (let i = 0; i < len; i++) arr[i] = binStr.charCodeAt(i);
-      callback(new Blob([arr], { type: type || 'image/png' }));
-    };
-  }
-
   const state = { files: [], counterStart: 1, results: [] }
   const el = (id)=>document.getElementById(id);
   const $drop = el('drop'), $list=el('list'), $log=el('log');
@@ -126,109 +115,96 @@
     log(`${imgs.length}개 이미지 추가됨.`,'ok');
   }
 
-  function convertToBlob(sourceBlob, targetFormat, qualityPref='quality'){
-    return new Promise((resolve, reject)=>{
-      const img = new Image();
-      const url = URL.createObjectURL(sourceBlob);
-      img.onload = ()=>{
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width; canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img,0,0);
-          const mime = `image/${targetFormat}`;
-          let quality;
-          if(targetFormat==='jpeg' || targetFormat==='webp'){
-            const map = {quality:1.0, normal:0.85, low:0.70};
-            quality = map[qualityPref] ?? 1.0;
-          }
-          canvas.toBlob(b=>{
-            URL.revokeObjectURL(url);
-            b?resolve(b):reject(new Error('toBlob 실패'));
-          }, mime, quality);
-        } catch(err){
-          URL.revokeObjectURL(url);
-          reject(err);
-        }
+  // FileReader 기반 변환 (모바일 호환성 ↑)
+  function convertToBlob(sourceBlob, targetFormat){
+    return new Promise((resolve,reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const img = new Image();
+        img.onload=()=>{
+          try{
+            const canvas=document.createElement('canvas');
+            canvas.width=img.width; canvas.height=img.height;
+            const ctx=canvas.getContext('2d');
+            ctx.drawImage(img,0,0);
+            canvas.toBlob(b=>{
+              if(b) resolve(b);
+              else reject(new Error('toBlob 실패'));
+            }, `image/${targetFormat}`,1.0);
+          }catch(err){ reject(err); }
+        };
+        img.onerror=()=>reject(new Error('이미지 로드 실패'));
+        img.src=reader.result;
       };
-      img.onerror = ()=>{
-        URL.revokeObjectURL(url);
-        reject(new Error('이미지 로드 실패'));
-      };
-      img.src = url;
-    })
+      reader.onerror=()=>reject(new Error('파일 읽기 실패'));
+      reader.readAsDataURL(sourceBlob);
+    });
   }
 
   async function processImageBlob(originalBlob, finalFormat){
-    const tempJpeg = await convertToBlob(originalBlob, 'jpeg', 'quality');
-    if(finalFormat==='jpeg'){
-      return { blob: tempJpeg, format: 'jpeg' };
-    }
-    const finalBlob = await convertToBlob(tempJpeg, finalFormat, 'quality');
-    return { blob: finalBlob, format: finalFormat };
+    const tempJpeg = await convertToBlob(originalBlob,'jpeg');
+    if(finalFormat==='jpeg') return {blob:tempJpeg,format:'jpeg'};
+    const finalBlob = await convertToBlob(tempJpeg, finalFormat);
+    return {blob:finalBlob,format:finalFormat};
   }
 
   async function processFiles(addToListOnly=false, autoDownload=false){
-    const outFmt = document.getElementById('out-format').value;
-    const prefix = document.getElementById('name-prefix').value.trim();
+    const outFmt = el('out-format').value;
+    const prefix = el('name-prefix').value.trim();
     if(state.files.length===0){ log('처리할 이미지를 먼저 선택하세요.','warn'); return; }
 
     log(`${state.files.length}개 이미지 처리 시작...`);
-    let num = state.counterStart;
-    const results = [];
+    let num=state.counterStart;
+    const results=[];
     for(const file of state.files){
       try{
-        const { blob, format } = await processImageBlob(file, outFmt);
-        const baseName = prefix ? `${prefix} ${num}` : `${num}`;
-        const filename = `${baseName}.${format}`;
+        const {blob,format}=await processImageBlob(file,outFmt);
+        const baseName=prefix?`${prefix} ${num}`:`${num}`;
+        const filename=`${baseName}.${format}`;
         num++;
-        results.push({ blob, filename });
+        results.push({blob,filename});
         if(autoDownload){
-          const a = document.createElement('a');
-          const href = URL.createObjectURL(blob);
-          a.href = href;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          // revoke는 클릭 직후 지연 실행
-          setTimeout(()=>URL.revokeObjectURL(href), 1000);
+          const a=document.createElement('a');
+          const href=URL.createObjectURL(blob);
+          a.href=href; a.download=filename;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(()=>URL.revokeObjectURL(href),1500);
         }
-        log(`  성공: ${filename}`,'ok');
+        log(`성공: ${filename}`,'ok');
       }catch(err){
-        log(`  오류 (${file.name}): ${err.message}`,'err');
+        log(`오류 (${file.name}): ${err.message}`,'err');
       }
     }
 
     if(addToListOnly){
-      state.results = results;
-      renderList();
+      state.results=results; renderList();
     }
     if(!addToListOnly && !autoDownload){
-      // ZIP 다운로드
-      const zip = new JSZip();
-      results.forEach(r=> zip.file(r.filename, r.blob));
-      const content = await zip.generateAsync({type:"blob"});
-      saveAs(content, (prefix||'images')+".zip");
-      log(`ZIP 다운로드 완료`,'ok');
+      const zip=new JSZip();
+      results.forEach(r=>zip.file(r.filename,r.blob));
+      const content=await zip.generateAsync({type:"blob"});
+      saveAs(content,(prefix||'images')+".zip");
+      log("ZIP 다운로드 완료",'ok');
     }
-    state.files = [];
+
+    // 👉 더 이상 자동으로 state.files = [] 비우지 않음
     log('모든 이미지 처리가 완료되었습니다.');
   }
 
-  el('file-input').addEventListener('change', (e)=>{ onFilesPicked(e.target.files); e.target.value=''; })
-  el('clear').addEventListener('click', ()=>{ state.files = []; state.results=[]; renderList(); log('목록이 비워졌습니다.'); })
-  el('process-list').addEventListener('click', ()=> processFiles(true,false));
-  el('process-auto').addEventListener('click', ()=> processFiles(false,true));
-  el('process-zip').addEventListener('click', ()=> processFiles(false,false));
+  // 이벤트
+  el('file-input').addEventListener('change',e=>{onFilesPicked(e.target.files); e.target.value='';});
+  el('clear').addEventListener('click',()=>{state.files=[];state.results=[];renderList();log('목록이 비워졌습니다.');});
+  el('process-list').addEventListener('click',()=>processFiles(true,false));
+  el('process-auto').addEventListener('click',()=>processFiles(false,true));
+  el('process-zip').addEventListener('click',()=>processFiles(false,false));
 
-  ;['dragenter','dragover'].forEach(ev=>{
-    $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.add('dragover'); })
-  })
-  ;['dragleave','drop'].forEach(ev=>{
-    $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.remove('dragover'); })
-  })
-  $drop.addEventListener('drop', e=>{ onFilesPicked(e.dataTransfer.files); })
+  ['dragenter','dragover'].forEach(ev=>{
+    $drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();$drop.classList.add('dragover');});
+  });
+  ['dragleave','drop'].forEach(ev=>{
+    $drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();$drop.classList.remove('dragover');});
+  });
+  $drop.addEventListener('drop',e=>{onFilesPicked(e.dataTransfer.files);});
 
   renderList();
   </script>
