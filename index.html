@@ -33,7 +33,7 @@
     a{color:var(--accent)}
     input.nameprefix{padding:10px 12px;border-radius:12px;border:1px solid var(--muted);background:#101827;color:var(--text);min-width:120px}
 
-    /* --- 로딩 창 스타일 (추가) --- */
+    /* --- 로딩 창 스타일 --- */
     .loading-overlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0, 0, 0, 0.7);
@@ -58,7 +58,7 @@
 <body>
   <header>
     <h1>NAI PNG 메타데이터 제거기</h1>
-    <p class="lead">NovelAI 등에서 받은 PNG의 메타데이터를 <b>확장 스크립트와 동일한 방식</b>(캔버스 재인코딩 → 임시 JPEG → 최종 포맷)으로 제거합니다.<br/>자동 다운로드 / 개별 다운로드 버튼 / ZIP 다운로드 모두 지원합니다.</p>
+    <p class="lead">NovelAI 등에서 받은 PNG의 메타데이터를 <b>캔버스 재인코딩 → 임시 JPEG → 최종 포맷</b> 방식으로 제거합니다.<br/>자동 다운로드 / 개별 다운로드 버튼 / ZIP 다운로드 모두 지원합니다.</p>
   </header>
   <div class="wrap">
     <div class="card">
@@ -92,7 +92,7 @@
   </div>
 
   <footer>
-    <p>GitHub Pages에 그대로 올리면 동작합니다. 모든 처리는 <b>브라우저 로컬</b>에서 수행됩니다.</p>
+    <p>모든 처리는 <b>브라우저 로컬</b>에서 수행됩니다.</p>
   </footer>
 
   <div id="loading-overlay" class="loading-overlay" style="display: none;">
@@ -117,61 +117,9 @@
   const state = { files: [], counterStart: 1, results: [] }
   const el = (id)=>document.getElementById(id);
   const $drop = el('drop'), $list=el('list'), $log=el('log');
-  
-  // --- 여기부터 수정/추가된 부분입니다 ---
 
-  const processButtons = ['process-list', 'process-auto', 'process-zip'].map(id => el(id));
-
-  function setButtonsDisabled(disabled) {
-    processButtons.forEach(btn => btn.disabled = disabled);
-  }
-
-  function preloadImage(file) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => { URL.revokeObjectURL(url); resolve(file); };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`'${file.name}'은(는) 유효한 이미지가 아닙니다.`)); };
-      img.src = url;
-    });
-  }
-
-  async function onFilesPicked(files){
-    const imageFiles = [...files].filter(f=>f.type.startsWith('image/'));
-    if (imageFiles.length === 0) {
-      log('선택된 파일 중 이미지가 없습니다.', 'warn');
-      return;
-    }
-
-    const $loadingOverlay = el('loading-overlay');
-    const $loadingText = el('loading-text');
-    $loadingOverlay.style.display = 'flex';
-    setButtonsDisabled(true);
-
-    const totalCount = imageFiles.length;
-    const successfullyLoaded = [];
-    
-    for (let i = 0; i < totalCount; i++) {
-      const file = imageFiles[i];
-      $loadingText.textContent = `이미지 로딩 중... (${i + 1}/${totalCount})`;
-      try {
-        await preloadImage(file);
-        successfullyLoaded.push(file);
-      } catch (error) {
-        log(error.message, 'err');
-      }
-    }
-
-    state.files.push(...successfullyLoaded);
-    if (successfullyLoaded.length > 0) {
-      log(`${successfullyLoaded.length}개 이미지 추가됨.`, 'ok');
-    }
-    
-    $loadingOverlay.style.display = 'none';
-    setButtonsDisabled(false);
-  }
-
-  // --- 여기까지 수정/추가된 부분입니다 ---
+  const processButtons = ['process-list','process-auto','process-zip'].map(id=>el(id));
+  function setButtonsDisabled(disabled){ processButtons.forEach(btn=>btn.disabled=disabled); }
 
   function log(msg, cls=""){
     const line = document.createElement('div');
@@ -181,150 +129,135 @@
     $log.scrollTop = $log.scrollHeight;
   }
 
+  function preloadImage(file){
+    return new Promise((resolve,reject)=>{
+      const img=new Image(); const url=URL.createObjectURL(file);
+      img.onload=()=>{URL.revokeObjectURL(url); resolve(file);}
+      img.onerror=()=>{URL.revokeObjectURL(url); reject(new Error(`'${file.name}'은(는) 유효한 이미지가 아닙니다.`));}
+      img.src=url;
+    })
+  }
+
+  async function onFilesPicked(files){
+    const imageFiles=[...files].filter(f=>f.type.startsWith('image/'));
+    if(imageFiles.length===0){ log('선택된 파일 중 이미지가 없습니다.','warn'); return; }
+
+    const $loadingOverlay=el('loading-overlay'); const $loadingText=el('loading-text');
+    $loadingOverlay.style.display='flex'; setButtonsDisabled(true);
+
+    const total=imageFiles.length; const loaded=[];
+    for(let i=0;i<total;i++){
+      const file=imageFiles[i];
+      $loadingText.textContent=`이미지 로딩 중... (${i+1}/${total})`;
+      try{ await preloadImage(file); loaded.push(file);}catch(e){ log(e.message,'err'); }
+    }
+
+    state.files.push(...loaded);
+    if(loaded.length>0){ log(`${loaded.length}개 이미지 추가됨.`,'ok'); }
+    $loadingOverlay.style.display='none'; setButtonsDisabled(false);
+  }
+
   function renderList(){
-    $list.innerHTML = '';
+    $list.innerHTML='';
     if(state.results.length===0){
-      $list.innerHTML = '<div class="item" style="display:flex;align-items:center;justify-content:center;height:140px;color:var(--sub)">처리된 이미지가 없습니다.</div>'
-      return;
+      $list.innerHTML='<div class="item" style="display:flex;align-items:center;justify-content:center;height:140px;color:var(--sub)">처리된 이미지가 없습니다.</div>'; return;
     }
     state.results.forEach(r=>{
-      const card = document.createElement('div');card.className='item';
-      const img = document.createElement('img');img.className='thumb';
-      img.src = URL.createObjectURL(r.blob);
-      const meta = document.createElement('div');meta.className='meta';
-      meta.innerHTML = `<span>${r.filename}</span><span>${(r.blob.size/1024).toFixed(1)} KB</span>`;
-      const actions = document.createElement('div');actions.className='actions';
-      const btn = document.createElement('a');
-      btn.href = img.src; btn.download = r.filename; btn.className='btn'; btn.textContent='다운로드';
+      const card=document.createElement('div');card.className='item';
+      const img=document.createElement('img');img.className='thumb'; img.src=URL.createObjectURL(r.blob);
+      const meta=document.createElement('div');meta.className='meta'; meta.innerHTML=`<span>${r.filename}</span><span>${(r.blob.size/1024).toFixed(1)} KB</span>`;
+      const actions=document.createElement('div');actions.className='actions';
+      const btn=document.createElement('a');btn.href=img.src;btn.download=r.filename;btn.className='btn';btn.textContent='다운로드';
       actions.appendChild(btn);
       card.appendChild(img);card.appendChild(meta);card.appendChild(actions);
       $list.appendChild(card);
     })
   }
-  
-  // (기존 onFilesPicked 함수는 위에서 수정되었으므로 삭제되었습니다)
 
-  function convertToBlob(sourceBlob, targetFormat, qualityPref='quality'){
-    return new Promise((resolve, reject)=>{
-      const img = new Image();
-      const url = URL.createObjectURL(sourceBlob);
-      img.onload = ()=>{
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width; canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img,0,0);
-          const mime = `image/${targetFormat}`;
+  function convertToBlob(sourceBlob,targetFormat,qualityPref='quality'){
+    return new Promise((resolve,reject)=>{
+      const img=new Image(); const url=URL.createObjectURL(sourceBlob);
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          canvas.width=img.width; canvas.height=img.height;
+          const ctx=canvas.getContext('2d'); ctx.drawImage(img,0,0);
+          const mime=`image/${targetFormat}`;
           let quality;
-          if(targetFormat==='jpeg' || targetFormat==='webp'){
-            const map = {quality:1.0, normal:0.85, low:0.70};
-            quality = map[qualityPref] ?? 1.0;
+          if(targetFormat==='jpeg'||targetFormat==='webp'){
+            const map={quality:1.0,normal:0.85,low:0.70}; quality=map[qualityPref]??1.0;
           }
-          canvas.toBlob(b=>{
-            URL.revokeObjectURL(url);
-            b?resolve(b):reject(new Error('toBlob 실패'));
-          }, mime, quality);
-        } catch(err){
-          URL.revokeObjectURL(url);
-          reject(err);
-        }
-      };
-      img.onerror = ()=>{
-        URL.revokeObjectURL(url);
-        reject(new Error('이미지 로드 실패'));
-      };
-      img.src = url;
+          canvas.toBlob(b=>{URL.revokeObjectURL(url); b?resolve(b):reject(new Error('toBlob 실패'));},mime,quality);
+        }catch(err){URL.revokeObjectURL(url); reject(err);}
+      }
+      img.onerror=()=>{URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패'));};
+      img.src=url;
     })
   }
 
-  async function processImageBlob(originalBlob, finalFormat){
-    const tempJpeg = await convertToBlob(originalBlob, 'jpeg', 'quality');
-    if(finalFormat==='jpeg'){
-      return { blob: tempJpeg, format: 'jpeg' };
-    }
-    const finalBlob = await convertToBlob(tempJpeg, finalFormat, 'quality');
-    return { blob: finalBlob, format: finalFormat };
+  async function processImageBlob(originalBlob,finalFormat){
+    const tempJpeg=await convertToBlob(originalBlob,'jpeg','quality');
+    if(finalFormat==='jpeg'){ return {blob:tempJpeg,format:'jpeg'}; }
+    const finalBlob=await convertToBlob(tempJpeg,finalFormat,'quality');
+    return {blob:finalBlob,format:finalFormat};
   }
 
-  async function processFiles(addToListOnly=false, autoDownload=false){
-    const outFmt = document.getElementById('out-format').value;
-    const prefix = document.getElementById('name-prefix').value.trim();
-    if(state.files.length===0){ log('처리할 이미지를 먼저 선택하세요.','warn'); return; }
-    
-    setButtonsDisabled(true); // 처리 시작 시 버튼 비활성화
-    log(`${state.files.length}개 이미지 처리 시작...`);
-    let num = state.counterStart;
-    const results = [];
+  // --- 여기서부터 새로 바뀐 부분 ---
+  async function processSelectedImages(autoDownload=false, addToListOnly=false){
+    if(state.files.length===0){ log("처리할 이미지를 먼저 선택하세요.","warn"); return; }
+
+    log(`${state.files.length}개 이미지 처리 시작...`,"info");
+    setButtonsDisabled(true);
+
+    let num=state.counterStart;
+    const outFmt=el('out-format').value;
+    const prefix=el('name-prefix').value.trim();
+    const results=[];
+
     for(const file of state.files){
+      log(`- 처리 중: ${file.name}`,"info");
       try{
-        const { blob, format } = await processImageBlob(file, outFmt);
-        const baseName = prefix ? `${prefix} ${num}` : `${num}`;
-        const filename = `${baseName}.${format}`;
+        const {blob,format}=await processImageBlob(file,outFmt);
+        const baseName=prefix?`${prefix} ${num}`:`${num}`;
+        const filename=`${baseName}.${format}`;
         num++;
-        results.push({ blob, filename });
-        if(autoDownload){
-          saveAs(blob, filename);
-        }
-        log(`성공: ${filename}`,'ok');
-      }catch(err){
-        log(`오류 (${file.name}): ${err.message}`,'err');
-      }
+        results.push({blob,filename});
+        if(autoDownload){ saveAs(blob,filename); }
+        log(`  성공: ${filename}`,"ok");
+      }catch(err){ log(`  실패: ${file.name} (${err.message})`,"err"); }
     }
 
     if(addToListOnly){
       state.results.push(...results);
-      state.counterStart = num;
+      state.counterStart=num;
       renderList();
+    }else if(!autoDownload){
+      const zip=new JSZip();
+      results.forEach(r=>zip.file(r.filename,r.blob));
+      const content=await zip.generateAsync({type:"blob"});
+      saveAs(content,(prefix||"images")+".zip");
+      log("ZIP 다운로드 완료","ok");
     }
-    if(!addToListOnly && !autoDownload){
-      const zip = new JSZip();
-      results.forEach(r=> zip.file(r.filename, r.blob));
-      const content = await zip.generateAsync({type:"blob"});
-      saveAs(content, (prefix||'images')+".zip");
-      log("ZIP 다운로드 완료",'ok');
-    }
-    state.files = [];
-    log('모든 이미지 처리가 완료되었습니다.');
-    setButtonsDisabled(false); // 처리 완료 후 버튼 다시 활성화
+
+    state.files=[];
+    log("모든 이미지 처리가 완료되었습니다.","info");
+    setButtonsDisabled(false);
   }
 
-  el('file-input').addEventListener('change', (e)=>{ onFilesPicked(e.target.files); e.target.value=''; })
-  el('clear').addEventListener('click', ()=>{ state.files = []; state.results=[]; state.counterStart = 1; renderList(); log('목록이 비워졌습니다.'); })
-  el('process-list').addEventListener('click', ()=> processFiles(true,false));
-  
-  el('process-auto').addEventListener('click', () => {
-      if (state.results.length > 0) {
-        log(`처리된 목록의 이미지 ${state.results.length}개를 다운로드합니다.`, 'ok');
-        state.results.forEach(r => saveAs(r.blob, r.filename));
-        log('다운로드가 완료되었습니다.');
-      } 
-      else {
-        processFiles(false, true);
-      }
-  });
-
-  el('process-zip').addEventListener('click', async () => {
-      if (state.results.length > 0) {
-        log(`처리된 목록의 이미지 ${state.results.length}개를 ZIP으로 다운로드합니다.`, 'ok');
-        const prefix = el('name-prefix').value.trim();
-        const zip = new JSZip();
-        state.results.forEach(r => zip.file(r.filename, r.blob));
-        const content = await zip.generateAsync({ type: "blob" });
-        saveAs(content, (prefix || 'images') + ".zip");
-        log('ZIP 다운로드 완료', 'ok');
-      } 
-      else {
-        processFiles(false, false);
-      }
-  });
+  // 이벤트 연결
+  el('file-input').addEventListener('change',e=>{ onFilesPicked(e.target.files); e.target.value=''; })
+  el('clear').addEventListener('click',()=>{ state.files=[]; state.results=[]; state.counterStart=1; renderList(); log('목록이 비워졌습니다.'); })
+  el('process-list').addEventListener('click',()=>processSelectedImages(false,true));
+  el('process-auto').addEventListener('click',()=>processSelectedImages(true,false));
+  el('process-zip').addEventListener('click',()=>processSelectedImages(false,false));
 
   ;['dragenter','dragover'].forEach(ev=>{
-    $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.add('dragover'); })
+    $drop.addEventListener(ev,e=>{e.preventDefault(); e.stopPropagation(); $drop.classList.add('dragover');})
   })
   ;['dragleave','drop'].forEach(ev=>{
-    $drop.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); $drop.classList.remove('dragover'); })
+    $drop.addEventListener(ev,e=>{e.preventDefault(); e.stopPropagation(); $drop.classList.remove('dragover');})
   })
-  $drop.addEventListener('drop', e=>{ onFilesPicked(e.dataTransfer.files); })
+  $drop.addEventListener('drop',e=>{ onFilesPicked(e.dataTransfer.files); })
 
   renderList();
   </script>
